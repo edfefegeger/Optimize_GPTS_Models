@@ -63,8 +63,8 @@ def worker(api_key, lines, output_file, start_index=0, section_index=0):
                 if "choices" in response and len(response.choices) > 0 and "message" in response.choices[0]:
                     answer = response.choices[0].message['content'].strip()
                     file_writer.writerow([line, answer])
-                    print("Ответ:", num_for, answer)
-                    num_for + 1    
+                    print("Ответ:", answer)
+   
                 else:
                     print("Ошибка в полученном ответе.")
             except Exception as e:
