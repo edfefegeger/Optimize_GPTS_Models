@@ -4,6 +4,7 @@ import time
 import multiprocessing
 from multiprocessing import Value
 
+
 input_file = "input.txt"
 output_template = "output_{}.csv"
 keys = [
@@ -14,12 +15,25 @@ keys = [
 waiterror = 60
 showdebug = False
 
-def worker(api_key, lines, output_file):
+def worker(api_key, lines, output_file, processed_questions_file):
     w_file = open(output_file, mode="w", encoding='utf-8')
     file_writer = csv.writer(w_file, delimiter=",", quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
     file_writer.writerow(["Вопрос", "Ответ"])
-    for line in lines:
-        print("Вопрос:",line)
+
+    # Чтение номеров уже обработанных вопросов
+    try:
+        with open(processed_questions_file, 'r') as f:
+            processed_questions = set(map(int, f.read().strip().split(',')))
+    except FileNotFoundError:
+        # Если файл не существует, начинаем с пустого множества
+        processed_questions = set()
+
+    for i, line in enumerate(lines):
+        # Если вопрос уже был обработан, пропустить его
+        if i in processed_questions:
+            continue
+
+        print("Вопрос:", line)
         try:
             openai.api_key = api_key
             completion = openai.ChatCompletion.create(
@@ -38,39 +52,31 @@ def worker(api_key, lines, output_file):
             if "choices" in completion and len(completion.choices) > 0 and "message" in completion.choices[0]:
                 file_writer.writerow([line, completion.choices[0].message["content"]])
                 w_file.flush()
+                # Сохранение номера обработанного вопроса в processed_questions
+                processed_questions.add(i)
+                # Сохранение номеров обработанных вопросов в файл
+                with open(processed_questions_file, 'w') as f:
+                    f.write(','.join(map(str, processed_questions)))
             else:
                 print("Ошибка")
         except Exception as e:
             print(e)
             if "exceeded your current quota" in str(e):
-                print("Лимит. Берем следующий ключ",api_key)
+                print("Лимит. Берем следующий ключ", api_key)
                 break
             else:
                 time.sleep(waiterror)
     w_file.close()
 
-def split_data(data, n):
-    """Делит данные на n равных частей"""
-    avg = len(data) // n
-    out = []
-    last = 0.0
-
-    while last < len(data):
-        out.append(data[int(last):int(last + avg)])
-        last += avg
-
-    return out
-
 if __name__ == "__main__":
     with open(input_file, 'r', encoding='UTF-8') as file:
         lines = [line.rstrip() for line in file]
 
-    data_splits = split_data(lines, len(keys))
-
     processes = []
-    for i, (api_key, data_split) in enumerate(zip(keys, data_splits)):
+    for i, (api_key) in enumerate(keys):
         output_file = output_template.format(i)
-        p = multiprocessing.Process(target=worker, args=(api_key, data_split, output_file))
+        processed_questions_file = f"processed_questions_{i}.txt"
+        p = multiprocessing.Process(target=worker, args=(api_key, lines, output_file, processed_questions_file))
         processes.append(p)
         p.start()
 
