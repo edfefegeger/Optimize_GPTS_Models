@@ -2,7 +2,7 @@ import openai
 import csv
 import time
 import multiprocessing
-from multiprocessing import Value
+from multiprocessing import Lock, Value
 
 input_file = "input.txt"
 output_template = "output_{}.csv"
@@ -15,15 +15,20 @@ keys = [
     "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",
     "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"
 ]
+number_of_keys = len(keys)
 waiterror = 60
 showdebug = False
-files_processed = multiprocessing.Value('i', 0)  # Счетчик обработанных файлов
+processed_questions_file = "processed_questions.txt"
+file_lock = Lock()
+current_line_number = Value('i', 0)
+files_processed = Value('i', 0)
 
 def worker(api_key, questions, output_file):
+    global current_line_number
     w_file = open(output_file, mode="w", encoding='utf-8')
     file_writer = csv.writer(w_file, delimiter=",", quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
     file_writer.writerow(["Вопрос", "Ответ"])
-    for question in questions:
+    for i, question in enumerate(questions, start=current_line_number.value):
         print("Вопрос:", question)
         try:
             openai.api_key = api_key
@@ -43,6 +48,15 @@ def worker(api_key, questions, output_file):
             if "choices" in completion and len(completion.choices) > 0 and "message" in completion.choices[0]:
                 file_writer.writerow([question, completion.choices[0].message["content"]])
                 w_file.flush()
+
+                # Увеличиваем текущий номер обрабатываемой строки и записываем его в файл
+                with current_line_number.get_lock(), file_lock:
+                    current_line_number.value + number_of_keys
+                    with open(processed_questions_file, 'w') as f:
+                        f.write(str(current_line_number.value))
+
+                with file_lock:
+                    files_processed.value += 1
             else:
                 print("Ошибка")
         except Exception as e:
@@ -53,16 +67,20 @@ def worker(api_key, questions, output_file):
             else:
                 time.sleep(waiterror)
 
-    with files_processed.get_lock():
-        files_processed.value += 1
-
 if __name__ == "__main__":
     with open(input_file, 'r', encoding='UTF-8') as file:
         lines = [line.rstrip() for line in file]
 
+    # Получение номера строки, с которой следует начать обработку
+    try:
+        with open(processed_questions_file, 'r') as f:
+            current_line_number.value = int(f.read().strip())
+    except FileNotFoundError:
+        pass
+
     # Разделение запросов на наборы для каждого ключа
     data_splits = [[] for _ in range(len(keys))]
-    for i, line in enumerate(lines):
+    for i, line in enumerate(lines[current_line_number.value:], start=current_line_number.value):
         data_splits[i % len(keys)].append(line)
 
     processes = []
