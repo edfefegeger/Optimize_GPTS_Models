@@ -6,81 +6,71 @@ from multiprocessing import Value
 
 input_file = "input.txt"
 output_template = "output_{}.csv"
-api_keys = [
-    "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",
+keys = [
+    "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", "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",
+    "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", "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",
+    "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", "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", "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"
 ]
+waiterror = 60
+showdebug = False
 
-model_engine = "gpt-3.5-turbo"
-max_tokens = 1024
-wait_error = 60
+def worker(api_key, lines, output_file):
+    w_file = open(output_file, mode="w", encoding='utf-8')
+    file_writer = csv.writer(w_file, delimiter=",", quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
+    file_writer.writerow(["Вопрос", "Ответ"])
+    for line in lines:
+        print("Вопрос:",line)
+        try:
+            openai.api_key = api_key
+            completion = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo-0613",
+                temperature=0.5,
+                top_p=1,
+                frequency_penalty=0,
+                presence_penalty=0,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": line}
+                ]
+            )
+            if showdebug:
+                print(completion)
+            if "choices" in completion and len(completion.choices) > 0 and "message" in completion.choices[0]:
+                file_writer.writerow([line, completion.choices[0].message["content"]])
+                w_file.flush()
+            else:
+                print("Ошибка")
+        except Exception as e:
+            print(e)
+            if "exceeded your current quota" in str(e):
+                print("Лимит. Берем следующий ключ",api_key)
+                break
+            else:
+                time.sleep(waiterror)
+    w_file.close()
 
 def split_data(data, n):
+    """Делит данные на n равных частей"""
     avg = len(data) // n
-    avg = avg if avg > 0 else 1
-    return [data[i:i + avg] for i in range(0, len(data), avg)]
+    out = []
+    last = 0.0
 
-def save_progress(question_index, section_index, output_file_index):
-    with open("progress.txt", "w") as progress_file:
-        progress_file.write(f"{section_index.value}:{question_index}:{output_file_index}")
+    while last < len(data):
+        out.append(data[int(last):int(last + avg)])
+        last += avg
 
-def worker(api_key, lines, output_file_index, start_index=0, section_index=0):
-    output_file = output_template.format(output_file_index)
-    with open(output_file, mode="w", encoding='utf-8') as w_file:
-        file_writer = csv.writer(w_file, delimiter=",", quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
-        file_writer.writerow(["Вопрос", "Ответ"])
-        for i, line in enumerate(lines, start=start_index):
-            if i < section_index.value:
-                continue  # Пропустить вопросы до последней обработанной секции
-            print("Вопрос:", line)
-            try:
-                openai.api_key = api_key
-                response = openai.ChatCompletion.create(
-                    model=model_engine,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": line}
-                    ]
-                )
-                
-                if "choices" in response and len(response.choices) > 0 and "message" in response.choices[0]:
-                    answer = response.choices[0].message['content'].strip()
-                    file_writer.writerow([line, answer])
-                    print("Ответ:", answer)
-                else:
-                    print("Ошибка в полученном ответе.")
-            except Exception as e:
-                print("Ошибка:", e)
-                if "exceeded your current quota" in str(e):
-                    print("Лимит токенов исчерпан. Переход к следующему файлу.")
-                    section_index.value += 1
-                    save_progress(i, section_index, output_file_index)  # Сохранить прогресс
-                    return
-                else:
-                    time.sleep(wait_error)
-            finally:
-                section_index.value = i  # Обновить значение секции после каждого обработанного вопроса
+    return out
 
 if __name__ == "__main__":
-    try:
-        progress_data = open("progress.txt", "r").readline().strip().split(":")
-        section_index = Value('i', int(progress_data[0]))
-        question_index = int(progress_data[1])
-        output_file_index = int(progress_data[2])
-        print(f"Продолжаем с секции: {section_index.value}, вопроса: {question_index}, файл: {output_file_index}")
-    except Exception as e:
-        print("Ошибка при загрузке прогресса:", e)
-        section_index = Value('i', 0)
-        question_index = 0
-        output_file_index = 0
-
     with open(input_file, 'r', encoding='UTF-8') as file:
         lines = [line.rstrip() for line in file]
 
-    data_splits = split_data(lines, len(api_keys))
+    data_splits = split_data(lines, len(keys))
 
     processes = []
-    for i, (api_key, data_split) in enumerate(zip(api_keys[section_index.value:], data_splits[section_index.value:]), start=section_index.value):
-        p = multiprocessing.Process(target=worker, args=(api_key, data_split, output_file_index + i, question_index, section_index))
+    for i, (api_key, data_split) in enumerate(zip(keys, data_splits)):
+        output_file = output_template.format(i)
+        p = multiprocessing.Process(target=worker, args=(api_key, data_split, output_file))
         processes.append(p)
         p.start()
 
