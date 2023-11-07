@@ -32,11 +32,7 @@ def worker(api_key, questions, output_file, current_line_number):
         try:
             openai.api_key = api_key
             completion = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-0613",
-                temperature=0.5,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0,
+                model="gpt-4-0613",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": question}
@@ -50,7 +46,7 @@ def worker(api_key, questions, output_file, current_line_number):
 
                 # Увеличиваем текущий номер обрабатываемой строки и записываем его в файл
                 with current_line_number.get_lock(), file_lock:
-                    current_line_number.value += 1
+                    current_line_number.value += number_of_keys
                     with open(processed_questions_file, 'w') as f:
                         f.write(str(current_line_number.value))
 
