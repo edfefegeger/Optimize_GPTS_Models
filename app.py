@@ -16,7 +16,7 @@ keys = [
     "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"
 ]
 number_of_keys = len(keys)
-waiterror = 60
+waiterror = 30
 showdebug = False
 processed_questions_file = "processed_questions.txt"
 file_lock = Lock()
@@ -50,7 +50,7 @@ def worker(api_key, questions, output_file, current_line_number):
 
                 # Увеличиваем текущий номер обрабатываемой строки и записываем его в файл
                 with current_line_number.get_lock(), file_lock:
-                    current_line_number.value += number_of_keys
+                    current_line_number.value += 1
                     with open(processed_questions_file, 'w') as f:
                         f.write(str(current_line_number.value))
 
