@@ -25,7 +25,7 @@ files_processed = Value('i', 0)
 
 def worker(api_key, questions, output_file):
     global current_line_number
-    w_file = open(output_file, mode="w", encoding='utf-8')
+    w_file = open(output_file, mode="a", encoding='utf-8')
     file_writer = csv.writer(w_file, delimiter=",", quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
     file_writer.writerow(["Вопрос", "Ответ"])
     for i, question in enumerate(questions, start=current_line_number.value):
@@ -51,7 +51,7 @@ def worker(api_key, questions, output_file):
 
                 # Увеличиваем текущий номер обрабатываемой строки и записываем его в файл
                 with current_line_number.get_lock(), file_lock:
-                    current_line_number.value + number_of_keys
+                    current_line_number.value += number_of_keys
                     with open(processed_questions_file, 'w') as f:
                         f.write(str(current_line_number.value))
 
