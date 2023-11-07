@@ -23,8 +23,7 @@ file_lock = Lock()
 current_line_number = Value('i', 0)
 files_processed = Value('i', 0)
 
-def worker(api_key, questions, output_file):
-    global current_line_number
+def worker(api_key, questions, output_file, current_line_number):
     w_file = open(output_file, mode="a", encoding='utf-8')
     file_writer = csv.writer(w_file, delimiter=",", quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
     file_writer.writerow(["Вопрос", "Ответ"])
@@ -74,7 +73,9 @@ if __name__ == "__main__":
     # Получение номера строки, с которой следует начать обработку
     try:
         with open(processed_questions_file, 'r') as f:
-            current_line_number.value = int(f.read().strip())
+            saved_line_number = int(f.read().strip())
+            current_line_number.value = saved_line_number
+            print(f"Начинаем с обработки с позиции {saved_line_number}")
     except FileNotFoundError:
         pass
 
@@ -86,7 +87,7 @@ if __name__ == "__main__":
     processes = []
     for i, (api_key, questions) in enumerate(zip(keys, data_splits)):
         output_file = output_template.format(i)
-        p = multiprocessing.Process(target=worker, args=(api_key, questions, output_file))
+        p = multiprocessing.Process(target=worker, args=(api_key, questions, output_file, current_line_number))
         processes.append(p)
         p.start()
 
@@ -94,3 +95,7 @@ if __name__ == "__main__":
         process.join()
 
     print(f"Обработано {files_processed.value} файлов.")
+    
+    # Сохранение текущей позиции в processed_questions.txt
+    with open(processed_questions_file, 'w') as f:
+        f.write(str(current_line_number.value))
