@@ -16,7 +16,7 @@ keys = [
     "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"
 ]
 number_of_keys = len(keys)
-waiterror = 30
+waiterror = 10
 showdebug = False
 processed_questions_file = "processed_questions.txt"
 file_lock = Lock()
